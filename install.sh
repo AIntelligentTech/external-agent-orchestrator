@@ -179,7 +179,7 @@ echo "  /gemini:pro Create a dark mode design system (FREE)"
 echo "  /codex:high Review authentication for vulnerabilities"
 echo "  /opencode:sonnet Generate a REST API with JWT"
 echo ""
-echo -e "For more examples, see: ${BLUE}https://github.com/tonydeverill/external-agent-orchestrator${NC}"
+echo -e "For more examples, see: ${BLUE}https://github.com/AIntelligentTech/external-agent-orchestrator${NC}"
 echo ""
 
 # Remind about restart

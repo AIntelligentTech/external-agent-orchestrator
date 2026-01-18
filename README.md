@@ -59,7 +59,7 @@ External Agent Orchestrator extends Claude Code with the ability to delegate tas
 
 ```bash
 # Clone the repository
-git clone https://github.com/tonydeverill/external-agent-orchestrator.git
+git clone https://github.com/AIntelligentTech/external-agent-orchestrator.git
 cd external-agent-orchestrator
 
 # Install to user level (available in all projects)
