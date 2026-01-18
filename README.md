@@ -17,9 +17,9 @@ External Agent Orchestrator extends Claude Code with the ability to delegate tas
 ┌─────────────────────────────────────────────────────────────┐
 │                     Claude Code Session                      │
 │                                                              │
-│  /agent codex:xhigh "Design architecture"                   │
-│  /gemini "Create dark mode system"                          │
-│  /opencode:haiku "Write utility function"                   │
+│  /agent:codex:xhigh Design architecture                     │
+│  /gemini:pro Create dark mode system                        │
+│  /opencode:haiku Write utility function                     │
 │                           │                                  │
 │                           ▼                                  │
 │              ┌────────────────────────┐                     │
@@ -59,7 +59,7 @@ External Agent Orchestrator extends Claude Code with the ability to delegate tas
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/external-agent-orchestrator.git
+git clone https://github.com/tonydeverill/external-agent-orchestrator.git
 cd external-agent-orchestrator
 
 # Install to user level (available in all projects)
@@ -89,15 +89,26 @@ Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) for persistence.
 ### Main Command: `/agent`
 
 ```bash
-/agent <agent>[:<model>] <task> [--type TYPE]
+# Full colon syntax (recommended)
+/agent:<agent>:<model> <task>
+
+# Examples
+/agent:codex:xhigh Design a scalable microservices architecture
+/agent:gemini:flash Sketch a mobile login screen
+/agent:opencode:haiku Write a debounce utility function
 ```
 
 ### Shortcut Commands
 
 ```bash
-/codex[:<reasoning>] <task>    # Architecture & reasoning
-/gemini[:<model>] <task>       # Design (FREE)
-/opencode[:<model>] <task>     # Code generation
+/codex:<reasoning> <task>    # Architecture & reasoning
+/gemini:<model> <task>       # Design (FREE)
+/opencode:<model> <task>     # Code generation
+
+# Examples
+/codex:xhigh Design microservices for 10M users
+/gemini:pro Create a comprehensive design system
+/opencode:sonnet Generate a REST API with JWT
 ```
 
 ## Agents & Models
@@ -142,33 +153,42 @@ Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) for persistence.
 
 ```bash
 # Critical architecture decision with extended reasoning
-/agent codex:xhigh Design a real-time collaboration system for 10M concurrent users --type architecture
+/agent:codex:xhigh Design a real-time collaboration system for 10M concurrent users
 
-# Quick security review
-/codex:low Review this authentication flow for vulnerabilities --type security
+# Quick security review (shortcut)
+/codex:low Review this authentication flow for vulnerabilities
+
+# Thorough planning
+/codex:high Plan the migration from monolith to microservices
 ```
 
 ### Design
 
 ```bash
 # Comprehensive design system (FREE)
-/gemini Create a dark mode design system with color tokens, typography scale, and component specs
+/agent:gemini:pro Create a dark mode design system with color tokens and component specs
 
-# Quick UI sketch (FREE)
+# Quick UI sketch (FREE, shortcut)
 /gemini:flash Sketch a mobile onboarding flow with 3 screens
+
+# Component library
+/gemini:pro Design an accessible component library with variants
 ```
 
 ### Code Generation
 
 ```bash
 # Generate production API
-/opencode Generate a REST API with JWT authentication, rate limiting, and OpenAPI docs
+/agent:opencode:sonnet Generate a REST API with JWT authentication and rate limiting
 
-# Quick utility function
+# Quick utility function (shortcut)
 /opencode:haiku Write a TypeScript debounce function with proper types
 
 # FREE code generation
 /opencode:gemini Generate TypeScript interfaces for a user management system
+
+# Most capable model
+/opencode:opus Implement a complex real-time WebSocket system
 ```
 
 ## Configuration
@@ -253,8 +273,8 @@ sudo apt-get install jq
 
 ## How It Works
 
-1. **You invoke** `/agent codex:xhigh "task"`
-2. **Command parses** agent=codex, model=gpt-5.2-codex:xhigh
+1. **You invoke** `/agent:codex:xhigh Design microservices`
+2. **Command parses** `:codex:xhigh` → agent=codex, model=xhigh
 3. **External-agent subagent** is delegated the task
 4. **Script calls** OpenAI API with `reasoning_effort=high`
 5. **Response returns** to your Claude Code session

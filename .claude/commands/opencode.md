@@ -1,47 +1,61 @@
 ---
 description: OpenCode agent for code generation, refactoring, and testing (multi-provider)
-argument-hint: [:<model>] <task>
+argument-hint: :<model> <task>
 allowed-tools: Bash(~/.claude/scripts/external-agent.sh:*), Bash(.claude/scripts/external-agent.sh:*)
 ---
 
-# OpenCode Agent Shortcut
+# OpenCode Agent
 
-Invoke the OpenCode agent for code generation, refactoring, testing, and documentation.
+Code generation, refactoring, testing, and documentation with multiple providers.
 
-## Command Format
+## Usage
 
 ```
-/opencode[:<model>] <task>
+/opencode:<model> <task>
 ```
 
-## Models
+## Parse Arguments
 
-| Model | Provider | Description | Speed | Cost |
-|-------|----------|-------------|-------|------|
-| `opus` | Anthropic | Claude Opus 4.5, most capable | Slow | $$$ |
-| `sonnet` | Anthropic | Claude Sonnet, balanced (default) | Medium | $$ |
-| `haiku` | Anthropic | Claude Haiku, fast | Fast | $ |
-| `gpt4` | OpenAI | GPT-4 | Medium | $$ |
-| `gemini` | Google | Gemini 2.5 Pro | Medium | FREE |
+The first argument may start with `:` followed by the model:
+- `:opus` → Claude Opus 4.5 (most capable)
+- `:sonnet` → Claude Sonnet (balanced, default)
+- `:haiku` → Claude Haiku (fast, cheap)
+- `:gpt4` → GPT-4
+- `:gemini` → Gemini 2.5 Pro (FREE)
 
-## Parse Command
+If no colon prefix, use `sonnet` as default.
 
-- `/opencode <task>` → model=`claude-sonnet`
-- `/opencode:opus <task>` → model=`claude-opus-4-5`
-- `/opencode:sonnet <task>` → model=`claude-sonnet`
-- `/opencode:haiku <task>` → model=`claude-haiku`
-- `/opencode:gpt4 <task>` → model=`gpt-4`
-- `/opencode:gemini <task>` → model=`gemini`
+**Examples:**
+- `/opencode:haiku Write debounce` → model=claude-haiku
+- `/opencode Generate REST API` → model=claude-sonnet
+
+## Execution
+
+```bash
+~/.claude/scripts/external-agent.sh \
+  --agent opencode \
+  --model "<model>" \
+  --type generation \
+  --task "<task>"
+```
 
 ## Examples
 
 ```bash
-/opencode Generate a REST API with JWT authentication
-/opencode:opus Implement complex real-time system with WebSockets
-/opencode:haiku Write a debounce utility function
+/opencode:opus Implement a complex real-time collaboration system
+/opencode:sonnet Generate a REST API with JWT authentication
+/opencode:haiku Write a debounce utility function with TypeScript types
+/opencode:gpt4 Create a React hook for form validation
 /opencode:gemini Generate TypeScript interfaces for user management
+/opencode Refactor this function for better performance
 ```
 
-## Execution
+## Cost
 
-Delegate to `/agent opencode:<model> <task> --type generation`
+| Model | Provider | Speed | Cost |
+|-------|----------|-------|------|
+| opus | Anthropic | Slow | $$$ |
+| sonnet | Anthropic | Medium | $$ |
+| haiku | Anthropic | Fast | $ |
+| gpt4 | OpenAI | Medium | $$ |
+| gemini | Google | Medium | FREE |

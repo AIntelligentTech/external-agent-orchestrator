@@ -1,45 +1,58 @@
 ---
 description: Codex agent for architecture, planning, and reasoning tasks (OpenAI GPT-5.2)
-argument-hint: [:<reasoning>] <task>
+argument-hint: :<reasoning> <task>
 allowed-tools: Bash(~/.claude/scripts/external-agent.sh:*), Bash(.claude/scripts/external-agent.sh:*)
 ---
 
-# Codex Agent Shortcut
+# Codex Agent
 
-Invoke the Codex agent for architecture, planning, security, and performance tasks.
+Architecture, planning, security, and performance tasks with GPT-5.2 reasoning.
 
-## Command Format
+## Usage
 
 ```
-/codex[:<reasoning>] <task>
+/codex:<reasoning> <task>
 ```
 
-## Reasoning Levels
+## Parse Arguments
 
-| Level | Description | Speed | Cost |
-|-------|-------------|-------|------|
-| `xhigh` | Extended reasoning, most thorough | Slow | $$$$ |
-| `high` | High reasoning, thorough analysis | Slow | $$$ |
-| `medium` | Medium reasoning, balanced (default) | Medium | $$ |
-| `low` | Low reasoning, fast responses | Fast | $ |
+The first argument may start with `:` followed by the reasoning level:
+- `:xhigh` → Extended reasoning (slowest, most thorough)
+- `:high` → High reasoning (thorough)
+- `:medium` → Medium reasoning (balanced, default)
+- `:low` → Low reasoning (fast)
 
-## Parse Command
+If no colon prefix, use `medium` as default.
 
-- `/codex <task>` → model=`gpt-5.2-codex:medium`
-- `/codex:xhigh <task>` → model=`gpt-5.2-codex:xhigh`
-- `/codex:high <task>` → model=`gpt-5.2-codex:high`
-- `/codex:medium <task>` → model=`gpt-5.2-codex:medium`
-- `/codex:low <task>` → model=`gpt-5.2-codex:low`
+**Examples:**
+- `/codex:xhigh Design microservices` → reasoning=xhigh, task="Design microservices"
+- `/codex Design an API` → reasoning=medium, task="Design an API"
+
+## Execution
+
+```bash
+~/.claude/scripts/external-agent.sh \
+  --agent codex \
+  --model "gpt-5.2-codex:<reasoning>" \
+  --type architecture \
+  --task "<task>"
+```
 
 ## Examples
 
 ```bash
-/codex Design a real-time collaboration system
-/codex:xhigh Design microservices for 10M users
-/codex:high Review authentication system for vulnerabilities
+/codex:xhigh Design microservices for 10M concurrent users
+/codex:high Review this authentication system for vulnerabilities
+/codex:medium Plan the migration from monolith to microservices
 /codex:low Quick review of this API structure
+/codex Design a caching strategy for the application
 ```
 
-## Execution
+## Cost
 
-Delegate to `/agent codex:<reasoning> <task> --type architecture`
+| Reasoning | Speed | Cost |
+|-----------|-------|------|
+| xhigh | Slowest | $$$$ |
+| high | Slow | $$$ |
+| medium | Medium | $$ |
+| low | Fast | $ |
