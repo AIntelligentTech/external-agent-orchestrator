@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #
 # External Agent Orchestrator
-# Executes tasks via external AI coding CLIs (OpenCode, Gemini, Codex)
+# Executes tasks via external AI coding agents (Codex, Gemini, OpenCode)
 #
-# Usage: external-agent.sh --agent <agent> --model <model> --type <type> --task <task>
+# Usage: external-agent.sh --agent <agent> --model <model> --reasoning <level> --type <type> --task <task>
 #
 # Agents:
-#   codex    - OpenAI GPT-5.2 with reasoning (architecture, planning, security)
-#   gemini   - Google Gemini (design, visual, FREE)
-#   opencode - Multi-provider code generation (Claude, GPT-4, Gemini)
+#   codex    - OpenAI models with reasoning (architecture, planning, security)
+#   gemini   - Google Gemini models (design, visual, FREE)
+#   opencode - Multi-provider code generation (Claude, OpenAI, Gemini)
 #
 # Environment:
-#   OPENAI_API_KEY    - Required for codex, opencode:gpt4
-#   GOOGLE_API_KEY    - Required for gemini, opencode:gemini (FREE)
-#   ANTHROPIC_API_KEY - Required for opencode:opus/sonnet/haiku
+#   OPENAI_API_KEY    - Required for codex, opencode with OpenAI models
+#   GOOGLE_API_KEY    - Required for gemini, opencode with Gemini models (FREE)
+#   ANTHROPIC_API_KEY - Required for opencode with Claude models
 
 set -euo pipefail
 
@@ -43,27 +43,36 @@ while [[ $# -gt 0 ]]; do
       cat <<EOF
 External Agent Orchestrator
 
-Usage: $(basename "$0") --agent <agent> --model <model> --type <type> --task <task>
+Usage: $(basename "$0") --agent <agent> --model <model> --reasoning <level> --type <type> --task <task>
 
 Agents:
-  codex      OpenAI GPT-5.2 with reasoning levels
-  gemini     Google Gemini (FREE)
+  codex      OpenAI models with reasoning levels
+  gemini     Google Gemini models (FREE)
   opencode   Multi-provider code generation
 
-Models by Agent:
-  codex:     xhigh, high, medium, low, gpt-5, gpt-4
-  gemini:    pro, flash (both FREE)
-  opencode:  opus, sonnet, haiku, gpt4, gemini
+Codex Models (OpenAI):
+  gpt-5.2, gpt-5.1, gpt-5, gpt-5-mini    (with reasoning: none/minimal/low/medium/high)
+  o3, o3-pro, o4-mini                     (with reasoning: low/medium/high)
+  gpt-4.1, gpt-4.1-mini, gpt-4           (no reasoning)
 
-Types:
-  codex:     architecture, planning, security, performance
-  gemini:    design, visual, mockup
-  opencode:  generation, refactor, testing, documentation
+Gemini Models (Google, FREE):
+  gemini-3-pro, gemini-3-flash
+  gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite
+  gemini-2.0-flash, gemini-2.0-flash-lite
+
+OpenCode Models:
+  Claude: opus-4.5, sonnet-4.5, haiku-4.5, opus-4.1, sonnet-4
+  OpenAI: gpt-5.2, gpt-4.1
+  Google: gemini-3-pro, gemini-2.5-pro, gemini-2.5-flash (FREE)
+
+Reasoning Levels:
+  OpenAI: none, minimal, low, medium (default), high
+  Claude: standard (default), extended
 
 Examples:
-  $(basename "$0") --agent codex --model gpt-5.2-codex:xhigh --type architecture --task "Design microservices"
-  $(basename "$0") --agent gemini --model gemini-2.5-flash --type design --task "Create dark mode"
-  $(basename "$0") --agent opencode --model claude-haiku --type generation --task "Write utility"
+  $(basename "$0") --agent codex --model gpt-5.2 --reasoning high --type architecture --task "Design microservices"
+  $(basename "$0") --agent gemini --model gemini-3-flash --type design --task "Create dark mode"
+  $(basename "$0") --agent opencode --model haiku-4.5 --type generation --task "Write utility"
 EOF
       exit 0
       ;;
@@ -74,7 +83,7 @@ done
 # Validate required params
 if [[ -z "$AGENT" || -z "$TASK" ]]; then
   echo -e "${RED}ERROR: Missing required arguments${NC}" >&2
-  echo "Usage: $(basename "$0") --agent <agent> --task <task> [--model <model>] [--type <type>]" >&2
+  echo "Usage: $(basename "$0") --agent <agent> --task <task> [--model <model>] [--reasoning <level>] [--type <type>]" >&2
   exit 1
 fi
 
@@ -126,179 +135,99 @@ json_escape() {
   printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'
 }
 
-# Execute OpenCode agent (multi-provider)
-execute_opencode() {
+# Map model shortcuts to full API model IDs
+map_openai_model() {
   local model="$1"
-  local task="$2"
-  local type="$3"
-
-  # Map model shorthand to full provider/model
-  local full_model provider model_name
   case "$model" in
-    claude-opus-4-5|opus) full_model="anthropic/claude-opus-4-5-20251101"; provider="anthropic"; model_name="claude-opus-4-5-20251101" ;;
-    claude-sonnet|sonnet) full_model="anthropic/claude-sonnet-4-20250514"; provider="anthropic"; model_name="claude-sonnet-4-20250514" ;;
-    claude-haiku|haiku) full_model="anthropic/claude-3-5-haiku-20241022"; provider="anthropic"; model_name="claude-3-5-haiku-20241022" ;;
-    gpt-4) full_model="openai/gpt-4"; provider="openai"; model_name="gpt-4" ;;
-    gpt-4-turbo) full_model="openai/gpt-4-turbo"; provider="openai"; model_name="gpt-4-turbo" ;;
-    gemini) full_model="google/gemini-2.5-pro"; provider="google"; model_name="gemini-2.5-pro" ;;
-    *)
-      if [[ "$model" == *"/"* ]]; then
-        full_model="$model"
-        provider="${model%%/*}"
-        model_name="${model##*/}"
-      else
-        full_model="anthropic/$model"
-        provider="anthropic"
-        model_name="$model"
-      fi
-      ;;
-  esac
-
-  local system_prompt
-  system_prompt=$(get_system_prompt "$type")
-  local escaped_task escaped_system
-  escaped_task=$(json_escape "$task")
-  escaped_system=$(json_escape "$system_prompt")
-
-  echo -e "${BLUE}[OpenCode]${NC} Model: $full_model | Type: $type" >&2
-
-  case "$provider" in
-    anthropic)
-      if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-        echo -e "${RED}ERROR: ANTHROPIC_API_KEY not set${NC}" >&2
-        echo "Get a key at: https://console.anthropic.com/" >&2
-        exit 1
-      fi
-      curl -s https://api.anthropic.com/v1/messages \
-        -H "x-api-key: $ANTHROPIC_API_KEY" \
-        -H "anthropic-version: 2023-06-01" \
-        -H "content-type: application/json" \
-        -d "{
-          \"model\": \"$model_name\",
-          \"max_tokens\": 8000,
-          \"system\": $escaped_system,
-          \"messages\": [{\"role\": \"user\", \"content\": $escaped_task}]
-        }" | jq -r '.content[0].text // .error.message // "Unknown error"'
-      ;;
-    openai)
-      if [[ -z "${OPENAI_API_KEY:-}" ]]; then
-        echo -e "${RED}ERROR: OPENAI_API_KEY not set${NC}" >&2
-        echo "Get a key at: https://platform.openai.com/api-keys" >&2
-        exit 1
-      fi
-      curl -s https://api.openai.com/v1/chat/completions \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $OPENAI_API_KEY" \
-        -d "{
-          \"model\": \"$model_name\",
-          \"messages\": [
-            {\"role\": \"system\", \"content\": $escaped_system},
-            {\"role\": \"user\", \"content\": $escaped_task}
-          ],
-          \"max_tokens\": 8000
-        }" | jq -r '.choices[0].message.content // .error.message // "Unknown error"'
-      ;;
-    google)
-      if [[ -z "${GOOGLE_API_KEY:-}" ]]; then
-        echo -e "${RED}ERROR: GOOGLE_API_KEY not set${NC}" >&2
-        echo "Get a FREE key at: https://ai.google.dev/tutorials/setup" >&2
-        exit 1
-      fi
-      curl -s "https://generativelanguage.googleapis.com/v1beta/models/$model_name:generateContent" \
-        -H "Content-Type: application/json" \
-        -H "x-goog-api-key: $GOOGLE_API_KEY" \
-        -d "{
-          \"system_instruction\": {\"parts\": {\"text\": $escaped_system}},
-          \"contents\": {\"parts\": {\"text\": $escaped_task}},
-          \"generationConfig\": {\"maxOutputTokens\": 8000}
-        }" | jq -r '.candidates[0].content.parts[0].text // .error.message // "Unknown error"'
-      ;;
-    *)
-      echo -e "${RED}ERROR: Unknown provider '$provider'${NC}" >&2
-      exit 1
-      ;;
+    gpt-5.2) echo "gpt-5.2" ;;
+    gpt-5.1) echo "gpt-5.1" ;;
+    gpt-5) echo "gpt-5" ;;
+    gpt-5-mini) echo "gpt-5-mini" ;;
+    o3) echo "o3" ;;
+    o3-pro) echo "o3-pro" ;;
+    o4-mini) echo "o4-mini" ;;
+    gpt-4.1) echo "gpt-4.1" ;;
+    gpt-4.1-mini) echo "gpt-4.1-mini" ;;
+    gpt-4) echo "gpt-4" ;;
+    *) echo "$model" ;;
   esac
 }
 
-# Execute Gemini agent (Google, FREE)
-execute_gemini() {
+map_gemini_model() {
   local model="$1"
-  local task="$2"
-  local type="$3"
-
-  # Default model
-  [[ -z "$model" || "$model" == "pro" ]] && model="gemini-2.5-pro"
-  [[ "$model" == "flash" ]] && model="gemini-2.5-flash"
-
-  local system_prompt
-  system_prompt=$(get_system_prompt "$type")
-  local escaped_task escaped_system
-  escaped_task=$(json_escape "$task")
-  escaped_system=$(json_escape "$system_prompt")
-
-  echo -e "${BLUE}[Gemini]${NC} Model: $model | Type: $type (FREE)" >&2
-
-  if [[ -z "${GOOGLE_API_KEY:-}" ]]; then
-    echo -e "${RED}ERROR: GOOGLE_API_KEY not set${NC}" >&2
-    echo "Get a FREE key at: https://ai.google.dev/tutorials/setup" >&2
-    exit 1
-  fi
-
-  curl -s "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent" \
-    -H "Content-Type: application/json" \
-    -H "x-goog-api-key: $GOOGLE_API_KEY" \
-    -d "{
-      \"system_instruction\": {\"parts\": {\"text\": $escaped_system}},
-      \"contents\": {\"parts\": {\"text\": $escaped_task}},
-      \"generationConfig\": {\"maxOutputTokens\": 8000, \"temperature\": 0.7}
-    }" | jq -r '.candidates[0].content.parts[0].text // .error.message // "Unknown error"'
+  case "$model" in
+    # Shortcuts
+    3-pro|pro) echo "gemini-3-pro-preview" ;;
+    3-flash|flash) echo "gemini-3-flash-preview" ;;
+    2.5-pro) echo "gemini-2.5-pro" ;;
+    2.5-flash) echo "gemini-2.5-flash" ;;
+    2.5-flash-lite) echo "gemini-2.5-flash-lite" ;;
+    # Full names
+    gemini-3-pro) echo "gemini-3-pro-preview" ;;
+    gemini-3-flash) echo "gemini-3-flash-preview" ;;
+    gemini-2.5-pro) echo "gemini-2.5-pro" ;;
+    gemini-2.5-flash) echo "gemini-2.5-flash" ;;
+    gemini-2.5-flash-lite) echo "gemini-2.5-flash-lite" ;;
+    gemini-2.0-flash) echo "gemini-2.0-flash" ;;
+    gemini-2.0-flash-lite) echo "gemini-2.0-flash-lite" ;;
+    *) echo "$model" ;;
+  esac
 }
 
-# Execute Codex agent (OpenAI with reasoning effort)
+map_claude_model() {
+  local model="$1"
+  case "$model" in
+    opus-4.5|opus) echo "claude-opus-4-5-20251101" ;;
+    sonnet-4.5|sonnet) echo "claude-sonnet-4-5-20250929" ;;
+    haiku-4.5|haiku) echo "claude-haiku-4-5-20251001" ;;
+    opus-4.1) echo "claude-opus-4-1-20250805" ;;
+    sonnet-4) echo "claude-sonnet-4-20250514" ;;
+    opus-4) echo "claude-opus-4-20250514" ;;
+    *) echo "$model" ;;
+  esac
+}
+
+# Determine provider from model name
+get_provider() {
+  local model="$1"
+  case "$model" in
+    opus-*|sonnet-*|haiku-*|claude-*) echo "anthropic" ;;
+    gpt-*|o3*|o4*) echo "openai" ;;
+    gemini-*|*-pro|*-flash*) echo "google" ;;
+    *) echo "unknown" ;;
+  esac
+}
+
+# Execute Codex agent (OpenAI with reasoning)
 execute_codex() {
   local model="$1"
   local task="$2"
   local type="$3"
   local reasoning="${4:-medium}"
 
-  # Parse model and reasoning level
-  local base_model="$model"
-  local reasoning_effort="$reasoning"
+  local api_model
+  api_model=$(map_openai_model "$model")
 
-  # Handle model:reasoning format (e.g., gpt-5.2-codex:xhigh)
-  if [[ "$model" == *":"* ]]; then
-    base_model="${model%%:*}"
-    reasoning_effort="${model##*:}"
-  fi
+  # Determine if model supports reasoning
+  local supports_reasoning=true
+  case "$api_model" in
+    gpt-4.1*|gpt-4) supports_reasoning=false ;;
+  esac
 
-  # Map reasoning levels to API values
-  local api_reasoning
-  case "$reasoning_effort" in
-    xhigh|extended) api_reasoning="high" ;;  # API max is high; xhigh extends tokens
-    high) api_reasoning="high" ;;
-    medium) api_reasoning="medium" ;;
-    low) api_reasoning="low" ;;
+  # Map reasoning level
+  local api_reasoning="$reasoning"
+  case "$reasoning" in
+    none|minimal|low|medium|high) ;;
     *) api_reasoning="medium" ;;
   esac
 
   # Set max tokens based on reasoning level
-  local max_tokens
-  case "$reasoning_effort" in
-    xhigh|extended) max_tokens=32000 ;;
+  local max_tokens=8000
+  case "$reasoning" in
     high) max_tokens=16000 ;;
     medium) max_tokens=8000 ;;
-    low) max_tokens=4000 ;;
-    *) max_tokens=8000 ;;
-  esac
-
-  # Map model shorthand
-  local api_model
-  case "$base_model" in
-    gpt-5.2-codex|gpt-5.2) api_model="gpt-5.2-codex" ;;
-    gpt-5-codex|gpt-5) api_model="gpt-5-codex" ;;
-    gpt-4-turbo) api_model="gpt-4-turbo" ;;
-    gpt-4) api_model="gpt-4" ;;
-    *) api_model="$base_model" ;;
+    low|minimal) max_tokens=4000 ;;
+    none) max_tokens=4000 ;;
   esac
 
   local system_prompt
@@ -307,7 +236,7 @@ execute_codex() {
   escaped_task=$(json_escape "$task")
   escaped_system=$(json_escape "$system_prompt")
 
-  echo -e "${BLUE}[Codex]${NC} Model: $api_model | Reasoning: $reasoning_effort | Type: $type" >&2
+  echo -e "${BLUE}[Codex]${NC} Model: $api_model | Reasoning: $api_reasoning | Type: $type" >&2
 
   if [[ -z "${OPENAI_API_KEY:-}" ]]; then
     echo -e "${RED}ERROR: OPENAI_API_KEY not set${NC}" >&2
@@ -315,9 +244,9 @@ execute_codex() {
     exit 1
   fi
 
-  # Build request - use reasoning_effort for o1/o3/5.2 style models
+  # Build request
   local request_body
-  if [[ "$api_model" == *"5.2"* || "$api_model" == *"o1"* || "$api_model" == *"o3"* ]]; then
+  if [[ "$supports_reasoning" == "true" ]]; then
     request_body="{
       \"model\": \"$api_model\",
       \"reasoning_effort\": \"$api_reasoning\",
@@ -344,26 +273,204 @@ execute_codex() {
     -d "$request_body" | jq -r '.choices[0].message.content // .error.message // "Unknown error"'
 }
 
+# Execute Gemini agent (Google, FREE)
+execute_gemini() {
+  local model="$1"
+  local task="$2"
+  local type="$3"
+
+  local api_model
+  api_model=$(map_gemini_model "$model")
+
+  local system_prompt
+  system_prompt=$(get_system_prompt "$type")
+  local escaped_task escaped_system
+  escaped_task=$(json_escape "$task")
+  escaped_system=$(json_escape "$system_prompt")
+
+  echo -e "${BLUE}[Gemini]${NC} Model: $api_model | Type: $type (FREE)" >&2
+
+  if [[ -z "${GOOGLE_API_KEY:-}" ]]; then
+    echo -e "${RED}ERROR: GOOGLE_API_KEY not set${NC}" >&2
+    echo "Get a FREE key at: https://ai.google.dev/tutorials/setup" >&2
+    exit 1
+  fi
+
+  curl -s "https://generativelanguage.googleapis.com/v1beta/models/$api_model:generateContent" \
+    -H "Content-Type: application/json" \
+    -H "x-goog-api-key: $GOOGLE_API_KEY" \
+    -d "{
+      \"system_instruction\": {\"parts\": {\"text\": $escaped_system}},
+      \"contents\": {\"parts\": {\"text\": $escaped_task}},
+      \"generationConfig\": {\"maxOutputTokens\": 8000, \"temperature\": 0.7}
+    }" | jq -r '.candidates[0].content.parts[0].text // .error.message // "Unknown error"'
+}
+
+# Execute OpenCode agent (multi-provider)
+execute_opencode() {
+  local model="$1"
+  local task="$2"
+  local type="$3"
+  local reasoning="${4:-standard}"
+
+  local provider
+  provider=$(get_provider "$model")
+
+  local system_prompt
+  system_prompt=$(get_system_prompt "$type")
+  local escaped_task escaped_system
+  escaped_task=$(json_escape "$task")
+  escaped_system=$(json_escape "$system_prompt")
+
+  case "$provider" in
+    anthropic)
+      local api_model
+      api_model=$(map_claude_model "$model")
+
+      echo -e "${BLUE}[OpenCode]${NC} Model: $api_model (Claude) | Reasoning: $reasoning | Type: $type" >&2
+
+      if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+        echo -e "${RED}ERROR: ANTHROPIC_API_KEY not set${NC}" >&2
+        echo "Get a key at: https://console.anthropic.com/" >&2
+        exit 1
+      fi
+
+      local max_tokens=8000
+      local request_body
+
+      if [[ "$reasoning" == "extended" ]]; then
+        # Extended thinking request
+        request_body="{
+          \"model\": \"$api_model\",
+          \"max_tokens\": 16000,
+          \"thinking\": {
+            \"type\": \"enabled\",
+            \"budget_tokens\": 10000
+          },
+          \"messages\": [{\"role\": \"user\", \"content\": $escaped_task}]
+        }"
+      else
+        request_body="{
+          \"model\": \"$api_model\",
+          \"max_tokens\": $max_tokens,
+          \"system\": $escaped_system,
+          \"messages\": [{\"role\": \"user\", \"content\": $escaped_task}]
+        }"
+      fi
+
+      curl -s https://api.anthropic.com/v1/messages \
+        -H "x-api-key: $ANTHROPIC_API_KEY" \
+        -H "anthropic-version: 2023-06-01" \
+        -H "content-type: application/json" \
+        -d "$request_body" | jq -r '.content[0].text // .content[] | select(.type == "text") | .text // .error.message // "Unknown error"'
+      ;;
+
+    openai)
+      local api_model
+      api_model=$(map_openai_model "$model")
+
+      # Map reasoning for OpenAI
+      local api_reasoning="medium"
+      case "$reasoning" in
+        none|minimal|low|medium|high) api_reasoning="$reasoning" ;;
+        extended) api_reasoning="high" ;;
+        *) api_reasoning="medium" ;;
+      esac
+
+      echo -e "${BLUE}[OpenCode]${NC} Model: $api_model (OpenAI) | Reasoning: $api_reasoning | Type: $type" >&2
+
+      if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+        echo -e "${RED}ERROR: OPENAI_API_KEY not set${NC}" >&2
+        exit 1
+      fi
+
+      local max_tokens=8000
+      local request_body
+
+      # Check if model supports reasoning
+      local supports_reasoning=true
+      case "$api_model" in
+        gpt-4.1*|gpt-4) supports_reasoning=false ;;
+      esac
+
+      if [[ "$supports_reasoning" == "true" ]]; then
+        request_body="{
+          \"model\": \"$api_model\",
+          \"reasoning_effort\": \"$api_reasoning\",
+          \"messages\": [
+            {\"role\": \"system\", \"content\": $escaped_system},
+            {\"role\": \"user\", \"content\": $escaped_task}
+          ],
+          \"max_completion_tokens\": $max_tokens
+        }"
+      else
+        request_body="{
+          \"model\": \"$api_model\",
+          \"messages\": [
+            {\"role\": \"system\", \"content\": $escaped_system},
+            {\"role\": \"user\", \"content\": $escaped_task}
+          ],
+          \"max_tokens\": $max_tokens
+        }"
+      fi
+
+      curl -s https://api.openai.com/v1/chat/completions \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
+        -d "$request_body" | jq -r '.choices[0].message.content // .error.message // "Unknown error"'
+      ;;
+
+    google)
+      local api_model
+      api_model=$(map_gemini_model "$model")
+
+      echo -e "${BLUE}[OpenCode]${NC} Model: $api_model (Gemini, FREE) | Type: $type" >&2
+
+      if [[ -z "${GOOGLE_API_KEY:-}" ]]; then
+        echo -e "${RED}ERROR: GOOGLE_API_KEY not set${NC}" >&2
+        echo "Get a FREE key at: https://ai.google.dev/tutorials/setup" >&2
+        exit 1
+      fi
+
+      curl -s "https://generativelanguage.googleapis.com/v1beta/models/$api_model:generateContent" \
+        -H "Content-Type: application/json" \
+        -H "x-goog-api-key: $GOOGLE_API_KEY" \
+        -d "{
+          \"system_instruction\": {\"parts\": {\"text\": $escaped_system}},
+          \"contents\": {\"parts\": {\"text\": $escaped_task}},
+          \"generationConfig\": {\"maxOutputTokens\": 8000}
+        }" | jq -r '.candidates[0].content.parts[0].text // .error.message // "Unknown error"'
+      ;;
+
+    *)
+      echo -e "${RED}ERROR: Unknown provider for model '$model'${NC}" >&2
+      exit 1
+      ;;
+  esac
+}
+
 # Main execution
 case "$AGENT" in
-  opencode)
-    [[ -z "$MODEL" ]] && MODEL="claude-sonnet"
-    [[ -z "$TYPE" ]] && TYPE="generation"
-    execute_opencode "$MODEL" "$TASK" "$TYPE"
+  codex)
+    [[ -z "$MODEL" ]] && MODEL="gpt-5.2"
+    [[ -z "$TYPE" ]] && TYPE="architecture"
+    [[ -z "$REASONING" ]] && REASONING="medium"
+    execute_codex "$MODEL" "$TASK" "$TYPE" "$REASONING"
     ;;
   gemini)
-    [[ -z "$MODEL" ]] && MODEL="gemini-2.5-pro"
+    [[ -z "$MODEL" ]] && MODEL="gemini-3-flash"
     [[ -z "$TYPE" ]] && TYPE="design"
     execute_gemini "$MODEL" "$TASK" "$TYPE"
     ;;
-  codex)
-    [[ -z "$MODEL" ]] && MODEL="gpt-5.2-codex:medium"
-    [[ -z "$TYPE" ]] && TYPE="architecture"
-    execute_codex "$MODEL" "$TASK" "$TYPE" "$REASONING"
+  opencode)
+    [[ -z "$MODEL" ]] && MODEL="sonnet-4.5"
+    [[ -z "$TYPE" ]] && TYPE="generation"
+    [[ -z "$REASONING" ]] && REASONING="standard"
+    execute_opencode "$MODEL" "$TASK" "$TYPE" "$REASONING"
     ;;
   *)
     echo -e "${RED}ERROR: Unknown agent '$AGENT'${NC}" >&2
-    echo "Valid agents: opencode, gemini, codex" >&2
+    echo "Valid agents: codex, gemini, opencode" >&2
     exit 1
     ;;
 esac

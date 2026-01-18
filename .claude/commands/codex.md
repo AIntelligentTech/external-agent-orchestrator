@@ -1,58 +1,76 @@
 ---
-description: Codex agent for architecture, planning, and reasoning tasks (OpenAI GPT-5.2)
-argument-hint: :<reasoning> <task>
+description: Codex agent for architecture, planning, and reasoning tasks (OpenAI)
+argument-hint: :<model>:<reasoning> <task>
 allowed-tools: Bash(~/.claude/scripts/external-agent.sh:*), Bash(.claude/scripts/external-agent.sh:*)
 ---
 
 # Codex Agent
 
-Architecture, planning, security, and performance tasks with GPT-5.2 reasoning.
+Architecture, planning, security, and performance tasks using OpenAI models with reasoning.
 
 ## Usage
 
 ```
-/codex:<reasoning> <task>
+/codex:<model>:<reasoning> <task>
 ```
+
+## Models (10 available)
+
+| Model | Description | Reasoning Levels |
+|-------|-------------|------------------|
+| `gpt-5.2` | Latest, smartest (default) | none, minimal, low, medium, high |
+| `gpt-5.1` | Previous generation | none, low, medium, high |
+| `gpt-5` | Base GPT-5 | minimal, low, medium, high |
+| `gpt-5-mini` | Fast, cost-efficient | minimal, low, medium, high |
+| `o3` | Reasoning specialist | low, medium, high |
+| `o3-pro` | Extended thinking | low, medium, high |
+| `o4-mini` | Fast reasoning | low, medium, high |
+| `gpt-4.1` | Smartest non-reasoning | - |
+| `gpt-4.1-mini` | Fast non-reasoning | - |
+| `gpt-4` | Legacy | - |
+
+## Reasoning Levels
+
+| Level | Description | Use Case |
+|-------|-------------|----------|
+| `none` | No reasoning (GPT-5.x only) | Fast responses |
+| `minimal` | Minimal thinking | Quick reviews |
+| `low` | Light reasoning | Simple analysis |
+| `medium` | Balanced (default) | Standard tasks |
+| `high` | Deep reasoning | Complex architecture |
 
 ## Parse Arguments
 
-The first argument may start with `:` followed by the reasoning level:
-- `:xhigh` → Extended reasoning (slowest, most thorough)
-- `:high` → High reasoning (thorough)
-- `:medium` → Medium reasoning (balanced, default)
-- `:low` → Low reasoning (fast)
+Format: `:<model>:<reasoning> <task>` or `:<model> <task>` (uses default reasoning)
 
-If no colon prefix, use `medium` as default.
+Examples:
+- `/codex:gpt-5.2:high Design microservices` → model=gpt-5.2, reasoning=high
+- `/codex:o3:medium Plan migration` → model=o3, reasoning=medium
+- `/codex:gpt-4.1 Quick review` → model=gpt-4.1, reasoning=none
 
-**Examples:**
-- `/codex:xhigh Design microservices` → reasoning=xhigh, task="Design microservices"
-- `/codex Design an API` → reasoning=medium, task="Design an API"
+## Examples
+
+```bash
+# Deep architecture analysis
+/codex:gpt-5.2:high Design a real-time collaboration system for 10M users
+
+# Extended thinking for critical decisions
+/codex:o3-pro:high Review security architecture for vulnerabilities
+
+# Fast planning
+/codex:gpt-5-mini:low Quick review of this API structure
+
+# Non-reasoning model
+/codex:gpt-4.1 Summarize this codebase architecture
+```
 
 ## Execution
 
 ```bash
 ~/.claude/scripts/external-agent.sh \
   --agent codex \
-  --model "gpt-5.2-codex:<reasoning>" \
+  --model "<model>" \
+  --reasoning "<reasoning>" \
   --type architecture \
   --task "<task>"
 ```
-
-## Examples
-
-```bash
-/codex:xhigh Design microservices for 10M concurrent users
-/codex:high Review this authentication system for vulnerabilities
-/codex:medium Plan the migration from monolith to microservices
-/codex:low Quick review of this API structure
-/codex Design a caching strategy for the application
-```
-
-## Cost
-
-| Reasoning | Speed | Cost |
-|-----------|-------|------|
-| xhigh | Slowest | $$$$ |
-| high | Slow | $$$ |
-| medium | Medium | $$ |
-| low | Fast | $ |
