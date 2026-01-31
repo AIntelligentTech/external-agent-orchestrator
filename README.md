@@ -308,3 +308,4 @@ Contributions welcome! Please submit a Pull Request.
 ## License
 
 MIT License - see [LICENSE](LICENSE) file.
+# CI/CD Status
